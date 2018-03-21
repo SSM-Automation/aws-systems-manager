@@ -1,0 +1,48 @@
+{
+  "description": "Stop RDS instance",
+  "schemaVersion": "0.3",
+  "assumeRole": "{{ AutomationAssumeRole }}",
+  "parameters": {
+    "DBInstanceId": {
+      "type": "String",
+      "description": "(Required) RDS InstanceId to stop"
+    },
+    "DBSnapshotIdentifier": {
+      "type": "String",
+      "description": "(Optional) Instance identifier of the DB Snapshot created immediately before the DB instance is stopped.",
+      "default": ""
+    },
+    "OverwriteExistingSnapshot": {
+      "type": "Boolean",
+      "description": "(Optional) Overwrites existing snapshots.",
+      "default": "False"
+    },
+    "StoppedTags": {
+      "type": "MapList",
+      "description": "(Optional) Tags to create for stopped instance",
+      "default": []
+    },
+    "SnapshotTags": {
+      "type": "MapList",
+      "description": "(Optional) Tags to create for created snapshot.",
+      "default": []
+    },
+    "AutomationAssumeRole": {
+      "type": "String",
+      "description": "(Optional) The ARN of the role that allows Automation to perform the actions on your behalf.",
+      "default": ""
+    },
+    "LambdaAssumeRole": {
+      "type": "String",
+      "description": "(Optional) The ARN of the role assumed by lambda",
+      "default": ""
+    },
+    "Debug": {
+      "type": "String",
+      "description": "(Optional) Set to True to let step continue in case of failures and return error as the result. ",
+      "default": "False"
+    }
+
+  },
+  "mainSteps": []
+}

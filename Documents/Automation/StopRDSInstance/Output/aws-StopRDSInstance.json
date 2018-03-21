@@ -1,0 +1,87 @@
+{
+  "assumeRole": "{{ AutomationAssumeRole }}", 
+  "description": "Stop RDS Instance", 
+  "parameters": {
+    "OverwriteExistingSnapshot": {
+      "default": "False", 
+      "type": "String", 
+      "description": "(Optional)  Overwrite existing snapshot."
+    }, 
+    "SnapshotTags": {
+      "default": "", 
+      "type": "String", 
+      "description": "(Optional)  Tags to create for creatyed snapshot."
+    }, 
+    "LambdaAssumeRole": {
+      "default": "", 
+      "type": "String", 
+      "description": "(Optional) The ARN of the role assumed by lambda"
+    }, 
+    "DBSnapshotIdentifier": {
+      "default": "", 
+      "type": "String", 
+      "description": "(Optional)  The DBSnapshotIdentifier ID of the RDS snapshot to create."
+    }, 
+    "StoppedInstanceTags": {
+      "default": "", 
+      "type": "String", 
+      "description": "(Optional)  Tags to create for stopped instance."
+    }, 
+    "Debug": {
+      "default": "", 
+      "type": "String", 
+      "description": "(Optional) Set to True to let step continue in case of failures and returns error as result for troubleshooting. "
+    }, 
+    "AutomationAssumeRole": {
+      "default": "", 
+      "type": "String", 
+      "description": "(Optional) The ARN of the role that allows Automation to perform the actions on your behalf."
+    }, 
+    "DBInstanceIdentifier": {
+      "type": "String", 
+      "description": "(Required)  The DBInstanceId ID of the RDS Instance to stop."
+    }
+  }, 
+  "outputs": [
+    "stopRDSInstance.Payload"
+  ], 
+  "schemaVersion": "0.3", 
+  "mainSteps": [
+    {
+      "action": "aws:createStack", 
+      "inputs": {
+        "StackName": "stopRDSInstanceLambdaStack{{automation:EXECUTION_ID}}", 
+        "TemplateBody": "AWSTemplateFormatVersion: '2010-09-09'\nConditions:\n  LambdaAssumeRoleNotSpecified:\n    Fn::Or:\n    - Fn::Equals:\n      - {Ref: LambdaRoleArn}\n      - ''\n    - Fn::Equals:\n      - {Ref: LambdaRoleArn}\n      - undefined\nParameters:\n  LambdaName: {Description: 'The lambda function name\n\n      ', Type: String}\n  LambdaRoleArn: {Default: '', Description: 'The ARN of the role that allows Lambda\n      created by Automation to perform the action on your behalf\n\n      ', Type: String}\nResources:\n  LambdaRole:\n    Condition: LambdaAssumeRoleNotSpecified\n    Properties:\n      AssumeRolePolicyDocument:\n        Statement:\n        - Action: ['sts:AssumeRole']\n          Effect: Allow\n          Principal:\n            Service: [lambda.amazonaws.com]\n        Version: '2012-10-17'\n      Path: /\n      Policies:\n      - PolicyDocument:\n          Statement:\n            Action: ['rds:StopDBInstance', 'rds:DeleteDBSnapshot', 'rds:AddTagsToResource']\n            Effect: Allow\n            Resource: '*'\n          Version: '2012-10-17'\n        PolicyName: StopRDSInstanceLambdaPolicy\n    Type: AWS::IAM::Role\n  StopRDSInstanceLambda:\n    Properties:\n      Code: {ZipFile: \"#\\n# Copyright 2018 Amazon.com, Inc. or its affiliates. All\\\n          \\ Rights Reserved.\\n#\\n# Permission is hereby granted, free of charge, to\\\n          \\ any person obtaining a copy of this\\n# software and associated documentation\\\n          \\ files (the \\\"Software\\\"), to deal in the Software\\n# without restriction,\\\n          \\ including without limitation the rights to use, copy, modify,\\n# merge,\\\n          \\ publish, distribute, sublicense, and/or sell copies of the Software, and\\\n          \\ to\\n# permit persons to whom the Software is furnished to do so.\\n#\\n\\\n          # THE SOFTWARE IS PROVIDED \\\"AS IS\\\", WITHOUT WARRANTY OF ANY KIND, EXPRESS\\\n          \\ OR IMPLIED,\\n# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\\\n          \\ FITNESS FOR A\\n# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL\\\n          \\ THE AUTHORS OR COPYRIGHT\\n# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR\\\n          \\ OTHER LIABILITY, WHETHER IN AN ACTION\\n# OF CONTRACT, TORT OR OTHERWISE,\\\n          \\ ARISING FROM, OUT OF OR IN CONNECTION WITH THE\\n# SOFTWARE OR THE USE\\\n          \\ OR OTHER DEALINGS IN THE SOFTWARE.\\n#\\n\\nimport json\\nimport re\\nfrom\\\n          \\ datetime import datetime\\n\\nimport boto3\\n\\nSNAPSHOT_ID = \\\"DBSnapshotIdentifier\\\"\\\n          \\nDB_INST_ID = \\\"DBInstanceIdentifier\\\"\\n\\nINST_ID = \\\"db-instance-id\\\"\\n\\\n          ISO_DATE = \\\"iso-date\\\"\\nISO_DATETIME = \\\"iso-datetime\\\"\\nISO_TIME = \\\"\\\n          iso-time\\\"\\nSNAP_ID = \\\"db-snapshot-id\\\"\\nEXECUTION_ID = \\\"execution-id\\\"\\\n          \\n\\nPH_TAG_VAL_STR = \\\"{{{}}}\\\"\\nTAG_SHORTCUT_EXPR = \\\"Key=(.+),\\\\s*Value=(.*)\\\"\\\n          \\n\\n\\ndef parse_tags(tags_str):\\n\\tif re.match(\\\"({};?)+\\\".format(TAG_SHORTCUT_EXPR),\\\n          \\ tags_str):\\n\\t\\tmatches = [re.match(TAG_SHORTCUT_EXPR, t.strip()) for\\\n          \\ t in tags_str.split(\\\";\\\")]\\n\\t\\treturn [{\\\"Key\\\": m.group(1), \\\"Value\\\"\\\n          : m.group(2) if m.lastindex > 1 else \\\"\\\"} for m in matches]\\n\\telse:\\n\\t\\\n          \\treturn json.loads(tags_str)\\n\\n\\ndef build_tags(tag_str, context, tag_vars=None):\\n\\\n          \\tif tag_str == \\\"\\\":\\n\\t\\treturn []\\n\\n\\tplaceholders = tag_data(ctx=context,\\\n          \\ tag_vars=tag_vars)\\n\\ttags = parse_tags(tag_str)\\n\\n\\tfor tag in tags:\\n\\\n          \\t\\tvalue = tag.get(\\\"Value\\\")\\n\\t\\tfor p in placeholders:\\n\\t\\t\\tvalue\\\n          \\ = value.replace(PH_TAG_VAL_STR.format(p), str(placeholders[p]))\\n\\t\\t\\\n          tag[\\\"Value\\\"] = value\\n\\treturn tags\\n\\n\\ndef template_string(s, context,\\\n          \\ str_vars=None):\\n\\tif s == \\\"\\\":\\n\\t\\treturn \\\"\\\"\\n\\n\\tsnapshot_id = s\\n\\\n          \\tplaceholders = tag_data(ctx=context, tag_vars=str_vars)\\n\\tfor p in placeholders:\\n\\\n          \\t\\tsnapshot_id = snapshot_id.replace(PH_TAG_VAL_STR.format(p), str(placeholders[p]))\\n\\\n          \\treturn snapshot_id\\n\\n\\ndef tag_data(ctx, tag_vars):\\n\\tdt = datetime.now().replace(microsecond=0)\\n\\\n          \\tdata = {\\n\\t\\tISO_DATETIME: dt.isoformat(),\\n\\t\\tISO_DATE: dt.date().isoformat(),\\n\\\n          \\t\\tISO_TIME: dt.time().isoformat(),\\n\\t\\tEXECUTION_ID: \\\"-\\\".join(ctx.function_name.split(\\\"\\\n          -\\\")[-5:]) if ctx is not None else \\\"\\\"\\n\\t}\\n\\n\\tif tag_vars is not None:\\n\\\n          \\t\\tfor t in tag_vars:\\n\\t\\t\\tdata[t] = tag_vars[t]\\n\\n\\treturn data\\n\\n\\\n          \\ndef handler(event, context):\\n\\tdebug = False\\n\\n\\ttry:\\n\\t\\tdebug = event.get(\\\"\\\n          Debug\\\", False)\\n\\n\\t\\tclient = boto3.client('rds')\\n\\n\\t\\tinst_id = event[DB_INST_ID]\\n\\\n          \\t\\tsnapshot_str = event.get(SNAPSHOT_ID, \\\"\\\").strip()\\n\\t\\toverwrite_snapshot\\\n          \\ = event.get(\\\"OverwriteExistingSnapshot\\\", \\\"false\\\").lower() == \\\"true\\\"\\\n          \\n\\n\\t\\targs = {\\n\\t\\t\\tDB_INST_ID: inst_id\\n\\t\\t}\\n\\n\\t\\ttag_vars = {INST_ID:\\\n          \\ inst_id}\\n\\n\\t\\tif snapshot_str != \\\"\\\":\\n\\t\\t\\tsnapshot_id = template_string(snapshot_str,\\\n          \\ context, tag_vars)\\n\\t\\t\\targs[SNAPSHOT_ID] = snapshot_id\\n\\n\\t\\t\\tif\\\n          \\ overwrite_snapshot:\\n\\t\\t\\t\\ttry:\\n\\t\\t\\t\\t\\tclient.delete_db_snapshot(DBSnapshotIdentifier=snapshot_id)\\n\\\n          \\t\\t\\t\\texcept Exception as ex:\\n\\t\\t\\t\\t\\tif type(ex).__name__ != \\\"DBSnapshotNotFoundFault\\\"\\\n          :\\n\\t\\t\\t\\t\\t\\traise ex\\n\\t\\telse:\\n\\t\\t\\tsnapshot_id = \\\"\\\"\\n\\n\\t\\ttag_vars[SNAP_ID]\\\n          \\ = snapshot_id\\n\\t\\tresponse = client.stop_db_instance(**args)\\n\\t\\tdb_arn\\\n          \\ = response[\\\"DBInstance\\\"][\\\"DBInstanceArn\\\"]\\n\\n\\t\\tinst_tags = build_tags(event.get(\\\"\\\n          StoppedInstanceTags\\\", \\\"\\\"), context, tag_vars)\\n\\t\\tif len(inst_tags)\\\n          \\ != 0:\\n\\t\\t\\tclient.add_tags_to_resource(ResourceName=db_arn, Tags=inst_tags)\\n\\\n          \\n\\t\\tsnapshot_tags = build_tags(event.get(\\\"SnapshotTags\\\", \\\"\\\"), context,\\\n          \\ tag_vars)\\n\\t\\tif len(snapshot_tags) > 0 and snapshot_str != \\\"\\\":\\n\\t\\\n          \\t\\tsnapshot_arn = \\\"{}:snapshot:{}\\\".format(\\\":\\\".join(db_arn.split(\\\"\\\n          :\\\")[0:5]), snapshot_id)\\n\\t\\t\\tclient.add_tags_to_resource(ResourceName=snapshot_arn,\\\n          \\ Tags=snapshot_tags)\\n\\n\\t\\treturn {\\n\\t\\t\\tSNAPSHOT_ID: snapshot_id,\\n\\\n          \\t\\t}\\n\\texcept Exception as ex:\\n\\t\\tif not debug:\\n\\t\\t\\traise ex\\n\\t\\t\\\n          return {\\n\\t\\t\\t\\\"error\\\": ex.message,\\n\\t\\t}\\n\"}\n      FunctionName: {Ref: LambdaName}\n      Handler: index.handler\n      MemorySize: 128\n      Role:\n        Fn::If:\n        - LambdaAssumeRoleNotSpecified\n        - Fn::GetAtt: [LambdaRole, Arn]\n        - {Ref: LambdaRoleArn}\n      Runtime: python2.7\n      Timeout: 60\n    Type: AWS::Lambda::Function\n", 
+        "Parameters": [
+          {
+            "ParameterValue": "{{LambdaAssumeRole}}", 
+            "ParameterKey": "LambdaRoleArn"
+          }, 
+          {
+            "ParameterValue": "StopRDSInstanceLambda-{{automation:EXECUTION_ID}}", 
+            "ParameterKey": "LambdaName"
+          }
+        ], 
+        "Capabilities": [
+          "CAPABILITY_IAM"
+        ]
+      }, 
+      "name": "createDocumentStack"
+    }, 
+    {
+      "action": "aws:invokeLambdaFunction", 
+      "inputs": {
+        "FunctionName": "StopRDSInstanceLambda-{{automation:EXECUTION_ID}}", 
+        "Payload": "{\"DBInstanceIdentifier\": \"{{DBInstanceIdentifier}}\",\"DBSnapshotIdentifier\": \"{{DBSnapshotIdentifier}}\",\"OverwriteExistingSnapshot\": \"{{OverwriteExistingSnapshot}}\",\"StoppedInstanceTags\": \"{{StoppedInstanceTags}}\",\"SnapshotTags\": \"{{SnapshotTags}}\"}"
+      }, 
+      "name": "stopRDSInstance"
+    }, 
+    {
+      "action": "aws:deleteStack", 
+      "inputs": {
+        "StackName": "stopRDSInstanceLambdaStack{{automation:EXECUTION_ID}}"
+      }, 
+      "name": "deleteCloudFormationTemplate"
+    }
+  ]
+}

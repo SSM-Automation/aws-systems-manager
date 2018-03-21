@@ -1,0 +1,87 @@
+{
+  "description": "Stop RDS Instance",
+  "schemaVersion": "0.3",
+  "assumeRole": "{{ AutomationAssumeRole }}",
+  "parameters": {
+    "DBInstanceIdentifier": {
+      "type": "String",
+      "description": "(Required)  The DBInstanceId ID of the RDS Instance to stop."
+    },
+    "DBSnapshotIdentifier": {
+      "type": "String",
+      "description": "(Optional)  The DBSnapshotIdentifier ID of the RDS snapshot to create.",
+      "default": ""
+    },
+    "OverwriteExistingSnapshot": {
+      "type": "String",
+      "description": "(Optional)  Overwrite existing snapshot.",
+      "default": "False"
+    },
+    "StoppedInstanceTags": {
+      "type": "String",
+      "description": "(Optional)  Tags to create for stopped instance.",
+      "default": ""
+    },
+    "SnapshotTags": {
+      "type": "String",
+      "description": "(Optional)  Tags to create for creatyed snapshot.",
+      "default": ""
+    },
+    "LambdaAssumeRole": {
+      "type": "String",
+      "description": "(Optional) The ARN of the role assumed by lambda",
+      "default": ""
+    },
+    "AutomationAssumeRole": {
+      "type": "String",
+      "description": "(Optional) The ARN of the role that allows Automation to perform the actions on your behalf.",
+      "default": ""
+    },
+    "Debug": {
+      "type": "String",
+      "description": "(Optional) Set to True to let step continue in case of failures and returns error as result for troubleshooting. ",
+      "default": ""
+    }
+  },
+  "mainSteps": [
+    {
+      "name": "createDocumentStack",
+      "action": "aws:createStack",
+      "inputs": {
+        "Capabilities": [
+          "CAPABILITY_IAM"
+        ],
+        "StackName": "stopRDSInstanceLambdaStack{{automation:EXECUTION_ID}}",
+        "Parameters": [
+          {
+            "ParameterKey": "LambdaRoleArn",
+            "ParameterValue": "{{LambdaAssumeRole}}"
+          },
+          {
+            "ParameterKey": "LambdaName",
+            "ParameterValue": "StopRDSInstanceLambda-{{automation:EXECUTION_ID}}"
+          }
+        ],
+        "TemplateBody": "..."
+      }
+    },
+    {
+      "name": "stopRDSInstance",
+      "action": "aws:invokeLambdaFunction",
+      "inputs": {
+        "FunctionName": "StopRDSInstanceLambda-{{automation:EXECUTION_ID}}",
+        "Payload": "{\"DBInstanceIdentifier\": \"{{DBInstanceIdentifier}}\",\"DBSnapshotIdentifier\": \"{{DBSnapshotIdentifier}}\",\"OverwriteExistingSnapshot\": \"{{OverwriteExistingSnapshot}}\",\"StoppedInstanceTags\": \"{{StoppedInstanceTags}}\",\"SnapshotTags\": \"{{SnapshotTags}}\"}"
+      }
+    },
+    {
+      "name": "deleteCloudFormationTemplate",
+      "action": "aws:deleteStack",
+      "inputs": {
+        "StackName": "stopRDSInstanceLambdaStack{{automation:EXECUTION_ID}}"
+      }
+    }
+  ],
+  "outputs": [
+    "stopRDSInstance.Payload"
+  ]
+}
