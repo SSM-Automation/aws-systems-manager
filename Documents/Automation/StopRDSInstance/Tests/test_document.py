@@ -213,7 +213,7 @@ class DocumentTest(unittest.TestCase):
 
             LOGGER.info("All expected tags are set for stopped instance")
 
-            snapshot_arn = "arn:aws:rds:{}:{}:snapshot:{}".format(REGION, account, db_instance_id)
+            snapshot_arn = "arn:aws:rds:{}:{}:snapshot:{}-stopped".format(REGION, account, db_instance_id)
             self.assertTrue(self.verify_tags_are_set(snapshot_arn, [
                 "StopExecutionId",
                 "StopDBInstanceId",
